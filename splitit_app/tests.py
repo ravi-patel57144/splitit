@@ -168,17 +168,26 @@ class PaymentAPITest(SplitItAPITestCase):
         self.assertEqual(Payment.objects.count(), 1)
         self.assertEqual(Payment.objects.get().amount, Decimal('50.00'))
 
-    def test_settle_payment(self):
-        """Test settling a payment"""
-        payment = Payment.objects.create(
-            from_user=self.user2,
-            to_user=self.user1,
+    def test_settle_expenditure_split(self):
+        """Test settling an expenditure split via new endpoint"""
+        # user1 (auth) owes user2
+        event = Event.objects.create(name='Test Event', created_by=self.user2)
+        expenditure = Expenditure.objects.create(
+            event=event,
             amount=Decimal('50.00'),
-            status='pending'
+            description='Dinner',
+            paid_by=self.user2
         )
-        response = self.client.post(f'/api/payments/{payment.id}/settle/')
+        split = ExpenditureSplit.objects.create(
+            expenditure=expenditure,
+            user=self.user1,
+            amount=Decimal('50.00')
+        )
+        response = self.client.post(f'/api/expenditure-splits/{split.id}/settle/')
         self.assertEqual(response.status_code, status.HTTP_200_OK)
-        payment.refresh_from_db()
+        split.refresh_from_db()
+        self.assertTrue(split.is_paid)
+        payment = Payment.objects.get(expenditure_split=split)
         self.assertEqual(payment.status, 'completed')
 
 class UserBalanceAPITest(SplitItAPITestCase):

@@ -100,7 +100,7 @@ A Django REST API for splitting expenses among groups of people. This applicatio
 - `GET /api/payments/{id}/` - Get payment details
 - `PUT /api/payments/{id}/` - Update payment
 - `DELETE /api/payments/{id}/` - Delete payment
-- `POST /api/payments/{id}/settle/` - Settle payment
+- `POST /api/expenditure-splits/{id}/settle/` - Settle an expenditure split
 
 ### User
 
@@ -185,7 +185,14 @@ curl -X POST http://localhost:8000/api/payments/ \
   }'
 ```
 
-### 7. Get User Balance
+### 7. Settle an Expenditure Split
+
+```bash
+curl -X POST http://localhost:8000/api/expenditure-splits/123/settle/ \
+  -H "Authorization: Bearer YOUR_ACCESS_TOKEN"
+```
+
+### 8. Get User Balance
 
 ```bash
 curl -X GET http://localhost:8000/api/user/balance/ \
