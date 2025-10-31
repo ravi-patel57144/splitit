@@ -112,10 +112,10 @@ def user_balance(request):
     """Get user's balance summary"""
     user = request.user
 
-    # Calculate total amount user owes
+    # Calculate total amount user owes (exclude splits where user is the payer)
     total_owed = ExpenditureSplit.objects.filter(
         user=user, is_paid=False
-    ).aggregate(total=Sum('amount'))['total'] or Decimal('0.00')
+    ).exclude(expenditure__paid_by=user).aggregate(total=Sum('amount'))['total'] or Decimal('0.00')
 
     # Calculate total amount user is owed
     total_owes = ExpenditureSplit.objects.filter(
@@ -163,10 +163,10 @@ def occasion_summary(request, occasion_id):
     user_balances = []
 
     for user in users:
-        # Calculate user's balance for this occasion
+        # Calculate user's balance for this occasion (exclude splits where user is the payer)
         total_owed = ExpenditureSplit.objects.filter(
             user=user, expenditure__event__in=events, is_paid=False
-        ).aggregate(total=Sum('amount'))['total'] or Decimal('0.00')
+        ).exclude(expenditure__paid_by=user).aggregate(total=Sum('amount'))['total'] or Decimal('0.00')
 
         total_owes = ExpenditureSplit.objects.filter(
             expenditure__paid_by=user, expenditure__event__in=events, is_paid=False

@@ -106,6 +106,7 @@ class ExpenditureSerializer(serializers.ModelSerializer):
         split_user_ids = validated_data.pop('split_user_ids', [])
         custom_amounts = validated_data.pop('custom_amounts', [])
         split_type = validated_data.get('split_type', 'equal')
+        paid_by = validated_data.get('paid_by')
         
         expenditure = Expenditure.objects.create(**validated_data)
         
@@ -114,18 +115,24 @@ class ExpenditureSerializer(serializers.ModelSerializer):
             if split_user_ids:
                 amount_per_user = expenditure.amount / len(split_user_ids)
                 for user_id in split_user_ids:
+                    # Mark payer's split as paid automatically
+                    is_paid = (paid_by and user_id == paid_by.id)
                     ExpenditureSplit.objects.create(
                         expenditure=expenditure,
                         user_id=user_id,
-                        amount=amount_per_user
+                        amount=amount_per_user,
+                        is_paid=is_paid
                     )
         else:
             # Custom split
             for user_id, amount in zip(split_user_ids, custom_amounts):
+                # Mark payer's split as paid automatically
+                is_paid = (paid_by and user_id == paid_by.id)
                 ExpenditureSplit.objects.create(
                     expenditure=expenditure,
                     user_id=user_id,
-                    amount=amount
+                    amount=amount,
+                    is_paid=is_paid
                 )
         
         return expenditure

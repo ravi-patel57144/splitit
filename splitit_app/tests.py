@@ -120,6 +120,36 @@ class ExpenditureAPITest(SplitItAPITestCase):
         splits = ExpenditureSplit.objects.filter(expenditure__id=response.data['id'])
         for split in splits:
             self.assertEqual(split.amount, Decimal('50.00'))
+            # Payer (user1) is not in split, so all splits should be unpaid
+            self.assertFalse(split.is_paid)
+    
+    def test_create_expenditure_with_payer_in_split(self):
+        """Test that payer's split is automatically marked as paid when included in split"""
+        data = {
+            'event': self.event.id,
+            'amount': '100.00',
+            'description': 'Test expense',
+            'split_type': 'equal',
+            'split_user_ids': [self.user1.id, self.user2.id]  # user1 is payer and in split
+        }
+        response = self.client.post('/api/expenditures/', data)
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        
+        # Check that payer's split is marked as paid
+        payer_split = ExpenditureSplit.objects.get(
+            expenditure__id=response.data['id'],
+            user=self.user1
+        )
+        self.assertTrue(payer_split.is_paid)
+        self.assertEqual(payer_split.amount, Decimal('50.00'))
+        
+        # Check that other user's split is not paid
+        other_split = ExpenditureSplit.objects.get(
+            expenditure__id=response.data['id'],
+            user=self.user2
+        )
+        self.assertFalse(other_split.is_paid)
+        self.assertEqual(other_split.amount, Decimal('50.00'))
 
     def test_create_expenditure_custom_split(self):
         """Test creating an expenditure with custom split"""
@@ -141,6 +171,38 @@ class ExpenditureAPITest(SplitItAPITestCase):
         amounts = [split.amount for split in splits]
         self.assertIn(Decimal('60.00'), amounts)
         self.assertIn(Decimal('40.00'), amounts)
+        # Payer (user1) is not in split, so all splits should be unpaid
+        for split in splits:
+            self.assertFalse(split.is_paid)
+    
+    def test_create_expenditure_custom_split_with_payer(self):
+        """Test custom split where payer is included - their split should be marked as paid"""
+        data = {
+            'event': self.event.id,
+            'amount': '100.00',
+            'description': 'Test expense',
+            'split_type': 'custom',
+            'split_user_ids': [self.user1.id, self.user2.id],  # user1 is payer and in split
+            'custom_amounts': ['60.00', '40.00']
+        }
+        response = self.client.post('/api/expenditures/', data)
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        
+        # Check that payer's split is marked as paid
+        payer_split = ExpenditureSplit.objects.get(
+            expenditure__id=response.data['id'],
+            user=self.user1
+        )
+        self.assertTrue(payer_split.is_paid)
+        self.assertEqual(payer_split.amount, Decimal('60.00'))
+        
+        # Check that other user's split is not paid
+        other_split = ExpenditureSplit.objects.get(
+            expenditure__id=response.data['id'],
+            user=self.user2
+        )
+        self.assertFalse(other_split.is_paid)
+        self.assertEqual(other_split.amount, Decimal('40.00'))
 
     def test_create_expenditure_invalid_custom_split(self):
         """Test creating an expenditure with invalid custom split amounts"""
@@ -212,6 +274,36 @@ class UserBalanceAPITest(SplitItAPITestCase):
         self.assertEqual(response.data['total_owes'], Decimal('50.00'))
         self.assertEqual(response.data['total_owed'], Decimal('0.00'))
         self.assertEqual(response.data['balance'], Decimal('50.00'))
+    
+    def test_user_balance_payer_in_split(self):
+        """Test balance when payer is included in the split"""
+        # Create an expenditure where user1 pays and includes themselves in split
+        event = Event.objects.create(name='Test Event', created_by=self.user1)
+        expenditure = Expenditure.objects.create(
+            event=event,
+            amount=Decimal('100.00'),
+            description='Test expense',
+            paid_by=self.user1
+        )
+        # Create splits manually to simulate the new behavior
+        ExpenditureSplit.objects.create(
+            expenditure=expenditure,
+            user=self.user1,
+            amount=Decimal('50.00'),
+            is_paid=True  # Payer's split is automatically marked as paid
+        )
+        ExpenditureSplit.objects.create(
+            expenditure=expenditure,
+            user=self.user2,
+            amount=Decimal('50.00'),
+            is_paid=False
+        )
+        
+        response = self.client.get('/api/user/balance/')
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data['total_owes'], Decimal('50.00'))  # user2 owes user1
+        self.assertEqual(response.data['total_owed'], Decimal('0.00'))  # user1 doesn't owe (their split is paid)
+        self.assertEqual(response.data['balance'], Decimal('50.00'))  # Net balance
 
 class OccasionSummaryAPITest(SplitItAPITestCase):
     def test_occasion_summary(self):
